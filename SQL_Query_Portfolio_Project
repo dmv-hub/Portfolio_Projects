@@ -1,0 +1,137 @@
+SELECT *
+FROM dbo.Covid_Deaths
+WHERE [continent] IS NOT NULL
+ORDER BY 3,4
+
+SELECT *
+FROM dbo.Covid_Vaccinations
+WHERE [continent] IS NOT NULL
+ORDER BY 3,4
+
+
+SELECT [location], [date], total_cases, new_cases, total_deaths, population
+FROM dbo.Covid_Deaths
+ORDER BY 1,2
+
+
+--Total Cases vs Total Deaths in US
+SELECT [location], [date],total_cases,total_deaths, (CAST(total_deaths AS float)/CAST(total_cases AS float) *100) AS pct_death
+FROM dbo.Covid_Deaths
+WHERE [location] = 'United States'
+ORDER BY 1,2
+
+
+--Percent of Total pop infected
+SELECT [location], [date],population, total_cases, (CAST(total_cases AS float)/CAST(population AS float) *100) AS pct_infected
+FROM dbo.Covid_Deaths
+--WHERE [location] = 'United States'
+ORDER BY 1,2
+
+
+SELECT [location], population, MAX(total_cases) AS highest_infection_count, MAX((CAST(total_cases AS float)/CAST(population AS float)) *100) AS pct_pop_infected
+FROM dbo.Covid_Deaths
+GROUP BY population, [location]
+ORDER BY pct_pop_infected DESC
+
+
+SELECT [location], MAX(total_deaths) AS total_death_count
+FROM dbo.Covid_Deaths
+WHERE continent IS NOT NULL
+GROUP BY [location]
+ORDER BY total_death_count DESC
+
+SELECT [continent], MAX(total_deaths) AS total_death_count
+FROM dbo.Covid_Deaths
+WHERE continent IS NOT NULL
+GROUP BY [continent]
+ORDER BY total_death_count DESC
+
+--Global numbers
+--total cases, total deaths and percent death per date
+SELECT [date], SUM(new_cases) AS total_cases, SUM(new_deaths) AS total_deaths, SUM(CAST(new_deaths AS float))/SUM(CAST(new_cases AS float))*100 AS global_pct_deat
+FROM dbo.Covid_Deaths
+WHERE continent IS NOT NULL
+GROUP BY [date]
+ORDER BY 1,2
+
+--total cases, total deaths and percent death numbers globally
+SELECT SUM(new_cases) AS total_cases, SUM(new_deaths) AS total_deaths, SUM(CAST(new_deaths AS float))/SUM(CAST(new_cases AS float))*100 AS global_pct_deat
+FROM dbo.Covid_Deaths
+WHERE continent IS NOT NULL
+ORDER BY 1,2
+
+
+--Looking at Total pop vs. Vaccination
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+SUM(vac.new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) AS rolling_vaccinated_count,
+--(CAST(rolling_vaccinated_count AS float)/CAST(dea.population AS float))*100 AS pct_vaccinated
+FROM dbo.Covid_Deaths dea 
+JOIN dbo.Covid_Vaccinations vac
+    ON dea.location = vac.location 
+    AND dea.date = vac.date
+WHERE dea.continent IS NOT NULL
+ORDER BY 2,3   
+
+
+--Using a CTE
+WITH Pop_vs_Vac (contient, location, date, population, new_vaccinations, rolling_vaccinated_count)
+AS
+(
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+SUM(vac.new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) AS rolling_vaccinated_count
+--(CAST(rolling_vaccinated_count AS float)/CAST(dea.population AS float))*100 AS pct_vaccinated
+FROM dbo.Covid_Deaths dea 
+JOIN dbo.Covid_Vaccinations vac
+    ON dea.location = vac.location 
+    AND dea.date = vac.date
+WHERE dea.continent IS NOT NULL
+--ORDER BY 2,3
+)
+SELECT *, (CAST(rolling_vaccinated_count AS float)/CAST(population AS float))*100 AS pct_vaccinated
+FROM Pop_vs_Vac  
+
+
+--Temp Table
+DROP TABLE IF EXISTS #PctPopVaccinated -- To use temp table for multiple select cases
+CREATE TABLE #PctPopVaccinated
+(
+    continent NVARCHAR(50), 
+    location NVARCHAR(50),
+    date DATETIME,
+    population NUMERIC,
+    new_vaccinations NUMERIC,
+    rolling_vaccinated_count NUMERIC
+)
+
+INSERT INTO #PctPopVaccinated
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+SUM(vac.new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) AS rolling_vaccinated_count
+--(CAST(rolling_vaccinated_count AS float)/CAST(dea.population AS float))*100 AS pct_vaccinated
+FROM dbo.Covid_Deaths dea 
+JOIN dbo.Covid_Vaccinations vac
+    ON dea.location = vac.location 
+    AND dea.date = vac.date
+WHERE dea.continent IS NOT NULL
+--ORDER BY 2,3
+
+SELECT *, (CAST(rolling_vaccinated_count AS float)/CAST(population AS float))*100 AS pct_vaccinated
+FROM #PctPopVaccinated 
+
+
+--Creating view to store data for visualization
+
+CREATE VIEW PctPopVaccinated AS
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+SUM(vac.new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) AS rolling_vaccinated_count
+--(CAST(rolling_vaccinated_count AS float)/CAST(dea.population AS float))*100 AS pct_vaccinated
+FROM dbo.Covid_Deaths dea 
+JOIN dbo.Covid_Vaccinations vac
+    ON dea.location = vac.location 
+    AND dea.date = vac.date
+WHERE dea.continent IS NOT NULL
+--ORDER BY 2,3
+
+
+
+
+
